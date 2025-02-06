@@ -2,7 +2,7 @@
 
 Pequena aplicação para ajudar professores a gerar a tabela de plano de ensino
 
-Live: AQUI(https://link.traue.com.br/gerador_plano)
+Live: [AQUI](https://link.traue.com.br/geradorplano)
 
 
 Fique a vontade para contribuir para este projeto!
