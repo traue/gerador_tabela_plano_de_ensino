@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gerador de Tabela de Plano de Ensino</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <div class="container">
+    <h2>Gerador de Tabela de Plano de Ensino</h2>
+    <form id="formAulas">
+      <label for="data_inicial">Início das aulas:</label>
+      <input type="date" id="data_inicial" required />
+
+      <label for="num_semanas">Número de semanas:</label>
+      <input type="number" id="num_semanas" value="20" min="1" required />
+
+      <label for="num_aulas">Nº de aulas por Semana:</label>
+      <input type="number" id="num_aulas" value="2" min="1" max="6" required />
+
+      <label>Selecione os dias das aulas:</label>
+      <div class="dias-semana">
+        <label><input type="checkbox" name="dias" value="1" />
+          Segunda-feira</label>
+        <label><input type="checkbox" name="dias" value="2" /> Terça-feira</label>
+        <label><input type="checkbox" name="dias" value="3" /> Quarta-feira</label>
+        <label><input type="checkbox" name="dias" value="4" /> Quinta-feira</label>
+        <label><input type="checkbox" name="dias" value="5" /> Sexta-feira</label>
+        <label><input type="checkbox" name="dias" value="6" /> Sábado</label>
+      </div>
+
+      <button type="submit">Gerar Tabela</button>
+    </form>
+
+    <div id="result">
+      <h3>Tabela de Aulas</h3>
+      <table id="tabelaAulas">
+        <thead>
+          <tr>
+            <th>Semana</th>
+            <th>Data</th>
+            <th>Conteúdo</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <div class="export-container" id="exportContainer">
+        <button class="export-button" onclick="exportToExcel()">
+          ⬇️ Baixar Tabela (Excel)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    v. 1.0.0 - Desenvolvido por <strong>Thiago G. Traue</strong> -
+    <a href="https://github.com/traue/gerador_tabela_plano_de_ensino" id="repoLink">Projeto no GitHub</a>
+  </footer>
+
+  <script src="js/table_generator.js"></script>
+  <script src="js/export.js"></script>
+</body>
+
+</html>
