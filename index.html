@@ -1,104 +1,73 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Plano de Ensino - Gerador de Tabela</title>
-    <link rel="stylesheet" href="style.css" />
-    <link rel="icon" type="image/x-icon" href="assets/favicon.png">
-  </head>
-  <body>
-    <div class="container">
-      <header>
-        <h1>Gerador de Tabela do Plano de Ensino</h1>
-        <p>
-          Monte sua tabela de plano de ensino com base no número de semanas,
-          data de início e dias de aula.
-        </p>
-      </header>
 
-      <form id="configForm">
-        <div class="form-group">
-          <label for="numSemanas">Número de Semanas:</label>
-          <input
-            type="number"
-            id="numSemanas"
-            name="numSemanas"
-            min="1"
-            value="20"
-            required
-          />
-        </div>
-        <div class="form-group">
-          <label for="dataInicio">Data de Início:</label>
-          <input type="date" id="dataInicio" name="dataInicio" required />
-        </div>
-        <div class="form-group">
-          <label>Dia(s) de Aula:</label>
-          <div class="dias-semana">
-            <!-- Valores dos checkboxes: 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sáb -->
-            <label
-              ><input type="checkbox" name="dias" value="0" />Domingo</label
-            >
-            <label
-              ><input
-                type="checkbox"
-                name="dias"
-                value="1"
-              />Segunda-feira</label
-            >
-            <label
-              ><input
-                type="checkbox"
-                name="dias"
-                value="2"
-                checked
-              />Terça-feira</label
-            >
-            <label
-              ><input
-                type="checkbox"
-                name="dias"
-                value="3"
-              />Quarta-feira</label
-            >
-            <label
-              ><input
-                type="checkbox"
-                name="dias"
-                value="4"
-                checked
-              />Quinta-feira</label
-            >
-            <label
-              ><input type="checkbox" name="dias" value="5" />Sexta-feira</label
-            >
-            <label><input type="checkbox" name="dias" value="6" />Sábado</label>
-          </div>
-        </div>
-        <!-- Botão Gerar Tabela em largura total -->
-        <button type="submit" class="btn full-width">Gerar Tabela</button>
-      </form>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Plano de Ensino - Gerador de Tabela</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" type="image/x-icon" href="assets/favicon.png">
+</head>
 
-      <div id="tableContainer"></div>
-
-      <!-- Botão Exportar para Excel em largura total -->
-      <button id="exportBtn" class="btn full-width" style="display: none">
-        Exportar para Excel
-      </button>
-    </div>
-
-    <footer>
+<body>
+  <div class="container">
+    <header>
+      <h1>Gerador de Tabela do Plano de Ensino</h1>
       <p>
-        v. 2.0.0 - Desenvolvido por <strong>Thiago G. Traue </strong> -
-        <a href="https://github.com/traue/gerador_tabela_plano_de_ensino/"
-          >Projeto no GitHub</a
-        >
+        Monte sua tabela de plano de ensino com base no número de semanas,
+        data de início e dias de aula.
       </p>
-    </footer>
+    </header>
 
-    <!-- Biblioteca SheetJS para exportação em XLSX -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="js/script.js"></script>
-  </body>
+    <form id="configForm">
+      <div class="form-group">
+        <label for="numSemanas">Nº de semanas:</label>
+        <input type="number" id="numSemanas" name="numSemanas" min="1" value="20" required />
+      </div>
+      <div class="form-group">
+        <label for="dataInicio">Início das aulas:</label>
+        <input type="date" id="dataInicio" name="dataInicio" required />
+      </div>
+      <div class="form-group">
+        <label>Dia(s) de Aula:</label>
+        <div class="dias-semana">
+          <!-- Valores dos checkboxes: 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sáb -->
+          <label><input type="checkbox" name="dias" value="0" />Domingo</label>
+          <label><input type="checkbox" name="dias" value="1" />Segunda-feira</label>
+          <label><input type="checkbox" name="dias" value="2" />Terça-feira</label>
+          <label><input type="checkbox" name="dias" value="3" />Quarta-feira</label>
+          <label><input type="checkbox" name="dias" value="4" />Quinta-feira</label>
+          <label><input type="checkbox" name="dias" value="5" />Sexta-feira</label>
+          <label><input type="checkbox" name="dias" value="6" />Sábado</label>
+        </div>
+      </div>
+      <!-- Nova opção para disciplina híbrida -->
+      <div class="form-group">
+        <label for="hybridCheckbox">Incluir EaD?</label>
+        <label><input type="checkbox" id="hybridCheckbox" name="hybridCheckbox" />  Sim</label>
+      </div>
+      <!-- Botão Gerar Tabela em largura total -->
+      <button type="submit" class="btn full-width">Gerar Tabela</button>
+    </form>
+
+    <div id="tableContainer"></div>
+
+    <!-- Botão Exportar para Excel em largura total -->
+    <button id="exportBtn" class="btn full-width" style="display: none">
+      Exportar para Excel
+    </button>
+  </div>
+
+  <footer>
+    <p>
+      v. 2.1.0 - Desenvolvido por <strong>Thiago G. Traue </strong> -
+      <a href="https://github.com/traue/gerador_tabela_plano_de_ensino/">Projeto no GitHub</a>
+    </p>
+  </footer>
+
+  <!-- Biblioteca SheetJS para exportação em XLSX -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="js/script.js"></script>
+</body>
+
 </html>
