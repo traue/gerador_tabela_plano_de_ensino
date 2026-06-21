@@ -69,8 +69,11 @@
 
     <!-- Botão Exportar para Excel em largura total -->
     <button id="exportBtn" class="btn full-width" style="display: none">
-      ⬇️ Exportar para Excel 
+      ⬇️ Exportar para Excel
     </button>
+
+    <!-- Botão para resetar todo o plano (abre confirmação) -->
+    <button id="resetBtn" class="btn-danger full-width">🗑️ Resetar tudo</button>
   </div>
 
   <footer>
@@ -110,6 +113,22 @@
       </div>
       <ul id="modalRestricoesList" class="restricoes-list"></ul>
       <button type="button" class="btn full-width" id="concluirModal">Concluir</button>
+    </div>
+  </div>
+
+  <!-- Modal de confirmação para resetar tudo -->
+  <div id="resetModal" class="modal-overlay" hidden>
+    <div class="modal modal-confirm" role="alertdialog" aria-modal="true" aria-labelledby="resetTitulo">
+      <div class="modal-confirm-icon">🗑️</div>
+      <h2 id="resetTitulo">Resetar tudo?</h2>
+      <p class="modal-sub">
+        Isso vai apagar a configuração, a tabela, todo o conteúdo digitado e as
+        restrições salvas. Esta ação não pode ser desfeita.
+      </p>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancelarReset">Cancelar</button>
+        <button type="button" class="btn" id="confirmarReset">Sim, resetar</button>
+      </div>
     </div>
   </div>
 

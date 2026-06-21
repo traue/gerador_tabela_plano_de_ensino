@@ -128,6 +128,18 @@ function carregarEstado() {
   }
 }
 
+// Apaga todo o estado salvo (plano + restrições) e recarrega a página,
+// voltando aos valores padrão.
+function resetarTudo() {
+  try {
+    localStorage.removeItem(STORAGE_ESTADO);
+    localStorage.removeItem(STORAGE_RESTRICOES);
+  } catch (e) {
+    /* armazenamento indisponível */
+  }
+  location.reload();
+}
+
 // Função para gerar a tabela agrupada por semana (com mesclagem na primeira coluna e linha EaD se híbrida)
 function gerarTabela(event) {
   if (event) event.preventDefault();
@@ -453,4 +465,32 @@ document.getElementById('tableContainer').addEventListener('input', salvarEstado
 
   carregarRestricoes();
   render();
+})();
+
+// ===== Modal de confirmação de reset =====
+(function configurarReset() {
+  const overlay = document.getElementById('resetModal');
+  const btnAbrir = document.getElementById('resetBtn');
+  const btnCancelar = document.getElementById('cancelarReset');
+  const btnConfirmar = document.getElementById('confirmarReset');
+
+  function abrir() {
+    overlay.hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function fechar() {
+    overlay.hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  btnAbrir.addEventListener('click', abrir);
+  btnCancelar.addEventListener('click', fechar);
+  btnConfirmar.addEventListener('click', resetarTudo);
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) fechar();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !overlay.hidden) fechar();
+  });
 })();
