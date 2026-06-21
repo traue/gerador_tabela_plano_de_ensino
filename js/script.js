@@ -107,9 +107,15 @@ function gerarTabela(event) {
       const tdConteudo = document.createElement('td');
       const textarea = document.createElement('textarea');
       textarea.placeholder = "Conteúdo para " + formatDate(dataAula);
+      // Se a data da aula cair em um feriado, pré-preenche o conteúdo
+      const feriado = obterFeriado(dataAula);
+      if (feriado) {
+        textarea.value = "Feriado - " + feriado;
+        tr.classList.add('feriado');
+      }
       tdConteudo.appendChild(textarea);
       tr.appendChild(tdConteudo);
-      
+
       tbody.appendChild(tr);
     });
     

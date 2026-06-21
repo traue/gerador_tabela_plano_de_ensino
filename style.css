@@ -140,6 +140,11 @@ textarea {
   border: 1px solid #ccc;
 }
 
+/* Destaque para as linhas em que a data da aula cai em feriado */
+table tr.feriado td {
+  background: #fff3cd;
+}
+
 /* Estilos responsivos */
 @media (max-width: 600px) {
   .form-group {
