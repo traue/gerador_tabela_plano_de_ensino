@@ -1,20 +1,53 @@
-/* ===== Design tokens ===== */
+/* ===== Design tokens (tema claro) ===== */
 :root {
   --primary: #c1121f;
   --primary-dark: #780000;
   --primary-soft: #fde8ea;
   --bg: #f3f4f6;
   --surface: #ffffff;
+  --surface-2: #fafafa;
   --text: #1f2933;
   --muted: #6b7280;
   --border: #e5e7eb;
+  --hover: rgba(193, 18, 31, 0.03);
   --feriado-bg: #fff7e6;
   --feriado-border: #f59e0b;
+  --restricao-bg: #eef2ff;
+  --restricao-border: #c7d2fe;
+  --restricao-text: #312e81;
+  --restricao-accent: #6366f1;
   --radius: 14px;
   --radius-sm: 8px;
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
   --shadow-md: 0 8px 24px rgba(16, 24, 40, 0.08);
   --shadow-lg: 0 18px 48px rgba(16, 24, 40, 0.12);
+}
+
+/* ===== Tema escuro ===== */
+[data-theme="dark"] {
+  --primary: #ef4444;
+  --primary-dark: #b91c1c;
+  --primary-soft: #3a1d20;
+  --bg: #0f1115;
+  --surface: #181b21;
+  --surface-2: #20242c;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --border: #2d323b;
+  --hover: rgba(239, 68, 68, 0.08);
+  --feriado-bg: #3a2f13;
+  --restricao-bg: #1e2236;
+  --restricao-border: #34406b;
+  --restricao-text: #c7d2fe;
+  --restricao-accent: #818cf8;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.55);
+}
+
+[data-theme="dark"] body {
+  background-image: radial-gradient(circle at 0% 0%, rgba(239, 68, 68, 0.10), transparent 40%),
+    radial-gradient(circle at 100% 0%, rgba(185, 28, 28, 0.08), transparent 35%);
 }
 
 /* ===== Reset ===== */
@@ -51,8 +84,30 @@ body {
 
 /* ===== Header ===== */
 header {
+  position: relative;
   text-align: center;
   margin-bottom: 36px;
+}
+
+.theme-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.12s, border-color 0.15s;
+}
+
+.theme-toggle:hover {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  transform: translateY(-1px);
 }
 
 .badge {
@@ -87,11 +142,24 @@ header p {
 
 /* ===== Form ===== */
 form {
-  background: #fafafa;
+  background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 24px;
   margin-bottom: 28px;
+}
+
+/* Grade de campos de identificação */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 540px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .form-group {
@@ -111,7 +179,8 @@ form {
 }
 
 .form-group input[type="number"],
-.form-group input[type="date"] {
+.form-group input[type="date"],
+.form-group input[type="text"] {
   width: 100%;
   padding: 11px 14px;
   border: 1px solid var(--border);
@@ -123,7 +192,8 @@ form {
 }
 
 .form-group input[type="number"]:focus,
-.form-group input[type="date"]:focus {
+.form-group input[type="date"]:focus,
+.form-group input[type="text"]:focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(193, 18, 31, 0.15);
@@ -298,10 +368,16 @@ form {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: #eef2ff;
-  border: 1px solid #c7d2fe;
+  background: var(--restricao-bg);
+  border: 1px solid var(--restricao-border);
   border-radius: var(--radius-sm);
   padding: 10px 14px;
+}
+
+/* Itens marcados como feriado usam a cor de feriado */
+.restricao-item.is-feriado {
+  background: var(--feriado-bg);
+  border-color: var(--feriado-border);
 }
 
 .restricao-info {
@@ -313,30 +389,62 @@ form {
 
 .restricao-info strong {
   font-size: 0.95rem;
-  color: #312e81;
+  color: var(--restricao-text);
   word-break: break-word;
+}
+
+.restricao-item.is-feriado .restricao-info strong {
+  color: var(--text);
+}
+
+.restricao-tag {
+  display: inline-block;
+  background: var(--feriado-border);
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  vertical-align: middle;
 }
 
 .restricao-periodo {
   font-size: 0.82rem;
-  color: #6366f1;
+  color: var(--restricao-accent);
   font-weight: 600;
 }
 
-.restricao-remove {
+.restricao-item.is-feriado .restricao-periodo {
+  color: var(--feriado-border);
+}
+
+.restricao-acoes {
   flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+}
+
+.restricao-edit,
+.restricao-remove {
   width: 28px;
   height: 28px;
   border: none;
   border-radius: 50%;
-  background: #fff;
+  background: var(--surface);
   color: var(--primary);
-  font-size: 1.3rem;
+  font-size: 1rem;
   line-height: 1;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 
+.restricao-remove {
+  font-size: 1.3rem;
+}
+
+.restricao-edit:hover,
 .restricao-remove:hover {
   background: var(--primary);
   color: #fff;
@@ -399,7 +507,7 @@ form {
   height: 34px;
   border: none;
   border-radius: 50%;
-  background: #f3f4f6;
+  background: var(--surface-2);
   color: var(--muted);
   font-size: 1.5rem;
   line-height: 1;
@@ -457,6 +565,31 @@ form {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(193, 18, 31, 0.15);
+}
+
+.rf-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.rf-check input {
+  accent-color: var(--primary);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.rf-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.rf-actions .btn {
+  flex: 1;
 }
 
 .modal #concluirModal {
@@ -558,9 +691,10 @@ table th {
   text-transform: uppercase;
 }
 
-/* Centraliza as colunas Semana e Data */
+/* Centraliza as colunas Semana, Aula e Data */
 table th,
 table td.col-semana,
+table td.col-aula,
 table td.col-data {
   text-align: center;
   vertical-align: middle;
@@ -570,7 +704,13 @@ table td.col-semana {
   font-weight: 700;
   font-size: 1.05rem;
   color: var(--primary-dark);
-  background: #fafafa;
+  background: var(--surface-2);
+}
+
+table td.col-aula {
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 table td.col-data {
@@ -580,7 +720,7 @@ table td.col-data {
 }
 
 table tbody tr:hover td {
-  background: rgba(193, 18, 31, 0.03);
+  background: var(--hover);
 }
 
 /* Linha EaD */
@@ -591,7 +731,7 @@ table tr.ead td.col-data {
 
 /* Linha de restrição de período */
 table tr.restricao td {
-  background: #eef2ff;
+  background: var(--restricao-bg);
 }
 
 table tr.restricao td.col-data::before {
@@ -625,6 +765,97 @@ textarea:focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(193, 18, 31, 0.12);
+}
+
+/* ===== Arrasto de conteúdo ===== */
+.drag-handle {
+  display: inline-block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+  opacity: 0.45;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.drag-handle:hover {
+  opacity: 1;
+  color: var(--primary);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+table td.col-conteudo.drag-over {
+  outline: 2px dashed var(--primary);
+  outline-offset: -4px;
+}
+
+/* ===== Identificação e resumo do plano ===== */
+.plano-identificacao {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 32px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.ident-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ident-rotulo {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.ident-valor {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.plano-resumo {
+  margin: 8px 2px 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: right;
+}
+
+/* ===== Indicador de salvamento ===== */
+.save-indicator {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translate(-50%, 16px);
+  background: #047857;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 999px;
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s, transform 0.25s;
+  z-index: 1100;
+}
+
+.save-indicator.visivel {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 /* ===== Footer ===== */

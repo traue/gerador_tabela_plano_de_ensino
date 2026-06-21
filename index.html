@@ -5,6 +5,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Plano de Ensino - Gerador de Tabela</title>
+  <!-- Aplica o tema salvo antes da renderização para evitar flash -->
+  <script>
+    (function () {
+      try {
+        var tema = localStorage.getItem('planoEnsinoTema');
+        if (tema) document.documentElement.dataset.theme = tema;
+      } catch (e) { /* armazenamento indisponível */ }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -17,6 +26,8 @@
 <body>
   <div class="container">
     <header>
+      <button type="button" id="themeToggle" class="theme-toggle"
+        aria-label="Alternar tema claro/escuro" title="Alternar tema">🌙</button>
       <span class="badge">📚 Plano de Ensino</span>
       <h1>Gerador de Tabela do Plano de Ensino</h1>
       <p>
@@ -27,6 +38,16 @@
     </header>
 
     <form id="configForm">
+      <!-- Identificação do plano (aparece no topo da tabela e na exportação) -->
+      <div class="form-group">
+        <label>Identificação do plano:</label>
+        <div class="form-grid">
+          <input type="text" id="disciplina" name="disciplina" placeholder="Disciplina" />
+          <input type="text" id="professor" name="professor" placeholder="Professor(a)" />
+          <input type="text" id="turma" name="turma" placeholder="Turma" />
+          <input type="text" id="semestre" name="semestre" placeholder="Semestre (ex.: 2026.1)" />
+        </div>
+      </div>
       <div class="form-group">
         <label for="numSemanas">Nº de semanas:</label>
         <input type="number" id="numSemanas" name="numSemanas" min="1" value="20" required />
@@ -55,9 +76,9 @@
       </div>
       <!-- Restrições de período (gerenciadas via modal) -->
       <div class="form-group">
-        <label>Restrições de período:</label>
+        <label>Restrições e feriados:</label>
         <button type="button" class="btn-secondary" id="abrirModal">
-          ➕ Adicionar restrições
+          ➕ Adicionar restrições / feriados
         </button>
         <ul id="restricoesResumo" class="restricoes-list"></ul>
       </div>
@@ -78,7 +99,7 @@
 
   <footer>
     <p>
-      v. 2.2.0 - Desenvolvido por <strong>Thiago G. Traue </strong> -
+      v. 2.3.0 - Desenvolvido por <strong>Thiago G. Traue </strong> -
       <a href="https://github.com/traue/gerador_tabela_plano_de_ensino/">Projeto no GitHub</a>
     </p>
   </footer>
@@ -87,12 +108,13 @@
   <div id="restricaoModal" class="modal-overlay" hidden>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="restricaoTitulo">
       <div class="modal-header">
-        <h2 id="restricaoTitulo">Restrições de período</h2>
+        <h2 id="restricaoTitulo">Restrições e feriados</h2>
         <button type="button" class="modal-close" id="fecharModal" aria-label="Fechar">×</button>
       </div>
       <p class="modal-sub">
-        Cadastre períodos como semana de provas ou de palestras. As datas de aula
-        dentro do período recebem a descrição automaticamente na tabela.
+        Cadastre períodos (semana de provas, palestras) ou feriados estaduais e
+        municipais. As datas dentro do período recebem a descrição automaticamente;
+        marcadas como feriado, não contam como aula.
       </p>
       <div class="restricao-form">
         <div class="rf-row">
@@ -109,7 +131,14 @@
           <label for="restricaoDescricao">Descrição</label>
           <input type="text" id="restricaoDescricao" placeholder="Ex.: Semana de provas" />
         </div>
-        <button type="button" class="btn" id="addRestricao">Adicionar restrição</button>
+        <label class="rf-check">
+          <input type="checkbox" id="restricaoFeriado" />
+          Marcar como feriado (estadual/municipal) — não conta como aula
+        </label>
+        <div class="rf-actions">
+          <button type="button" class="btn-secondary" id="cancelarEdicao" hidden>Cancelar</button>
+          <button type="button" class="btn" id="addRestricao">Adicionar</button>
+        </div>
       </div>
       <ul id="modalRestricoesList" class="restricoes-list"></ul>
       <button type="button" class="btn full-width" id="concluirModal">Concluir</button>
@@ -130,6 +159,11 @@
         <button type="button" class="btn" id="confirmarReset">Sim, resetar</button>
       </div>
     </div>
+  </div>
+
+  <!-- Indicador discreto de salvamento automático -->
+  <div id="saveIndicator" class="save-indicator" role="status" aria-live="polite">
+    ✓ Salvo automaticamente
   </div>
 
   <!-- Biblioteca SheetJS para exportação em XLSX -->

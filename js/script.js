@@ -4,9 +4,10 @@
  * Gerador de Tabela do Plano de Ensino
  *
  * Aplicação estática que monta uma tabela de aulas por semana a partir de uma
- * configuração simples (nº de semanas, data de início e dias da semana).
- * Recursos: pré-preenchimento de feriados e restrições de período, salvamento
- * automático no navegador e exportação para Excel.
+ * configuração simples (identificação, nº de semanas, data de início e dias da
+ * semana). Recursos: numeração de aulas, pré-preenchimento de feriados e
+ * restrições de período, salvamento automático, tema claro/escuro, reordenação
+ * de conteúdo por arrasto e exportação para Excel.
  *
  * Depende de `feriados.js` (função global `obterFeriado`) e da biblioteca
  * SheetJS (`XLSX`), ambas carregadas antes deste arquivo.
@@ -47,12 +48,12 @@ function ymd(date) {
 }
 
 /* ============================================================
- * Restrições de período
+ * Restrições e feriados adicionais
  * ============================================================ */
 
 const STORAGE_RESTRICOES = 'restricoesPlanoEnsino';
 
-/** Lista de restrições em memória: { inicio, fim, descricao }. */
+/** Lista de restrições em memória: { inicio, fim, descricao, feriado }. */
 let restricoes = [];
 
 /** Carrega as restrições do localStorage (ignora dados inválidos). */
@@ -74,12 +75,73 @@ function salvarRestricoes() {
   }
 }
 
-/** Retorna as descrições das restrições cujo período contém a data informada. */
+/**
+ * Retorna as restrições cujo período contém a data informada.
+ * @returns {{descricao: string, feriado: boolean}[]}
+ */
 function obterRestricoesDaData(data) {
   const chave = ymd(data);
   return restricoes
     .filter(r => ymd(parseLocalDate(r.inicio)) <= chave && chave <= ymd(parseLocalDate(r.fim)))
-    .map(r => r.descricao);
+    .map(r => ({ descricao: r.descricao, feriado: !!r.feriado }));
+}
+
+/* ============================================================
+ * Identificação do plano
+ * ============================================================ */
+
+const CAMPOS_IDENT = [
+  ['disciplina', 'Disciplina'],
+  ['professor', 'Professor(a)'],
+  ['turma', 'Turma'],
+  ['semestre', 'Semestre']
+];
+
+/** Lê os campos de identificação do formulário. */
+function coletarIdentificacao() {
+  const ident = {};
+  CAMPOS_IDENT.forEach(([id]) => {
+    ident[id] = document.getElementById(id).value;
+  });
+  return ident;
+}
+
+/** Constrói o bloco de identificação exibido acima da tabela (ou null). */
+function construirIdentificacao() {
+  const ident = coletarIdentificacao();
+  const preenchidos = CAMPOS_IDENT.filter(([id]) => ident[id].trim());
+  if (preenchidos.length === 0) return null;
+
+  const bloco = document.createElement('div');
+  bloco.className = 'plano-identificacao';
+  preenchidos.forEach(([id, rotulo]) => {
+    const item = document.createElement('div');
+    item.className = 'ident-item';
+
+    const r = document.createElement('span');
+    r.className = 'ident-rotulo';
+    r.textContent = rotulo;
+
+    const v = document.createElement('span');
+    v.className = 'ident-valor';
+    v.textContent = ident[id];
+
+    item.append(r, v);
+    bloco.appendChild(item);
+  });
+  return bloco;
+}
+
+/** Atualiza o bloco de identificação acima da tabela, se ela existir. */
+function atualizarBlocoIdentificacao() {
+  const container = document.getElementById('tableContainer');
+  if (!container.querySelector('table')) return;
+
+  const existente = container.querySelector('.plano-identificacao');
+  if (existente) existente.remove();
+
+  const novo = construirIdentificacao();
+  if (novo) container.insertBefore(novo, container.firstChild);
 }
 
 /* ============================================================
@@ -87,6 +149,16 @@ function obterRestricoesDaData(data) {
  * ============================================================ */
 
 const STORAGE_ESTADO = 'planoEnsinoEstado';
+let saveIndicatorTimer;
+
+/** Mostra brevemente o indicador "Salvo automaticamente". */
+function indicarSalvo() {
+  const el = document.getElementById('saveIndicator');
+  if (!el) return;
+  el.classList.add('visivel');
+  clearTimeout(saveIndicatorTimer);
+  saveIndicatorTimer = setTimeout(() => el.classList.remove('visivel'), 1800);
+}
 
 /** Lê o conteúdo de todas as células da tabela, indexado pela chave da célula. */
 function coletarConteudos() {
@@ -102,6 +174,7 @@ function salvarEstado() {
   try {
     const estado = {
       config: {
+        identificacao: coletarIdentificacao(),
         numSemanas: document.getElementById('numSemanas').value,
         dataInicio: document.getElementById('dataInicio').value,
         dias: Array.from(document.querySelectorAll('input[name="dias"]:checked'))
@@ -112,6 +185,7 @@ function salvarEstado() {
       tabelaGerada: !!document.querySelector('#tableContainer table')
     };
     localStorage.setItem(STORAGE_ESTADO, JSON.stringify(estado));
+    indicarSalvo();
   } catch (e) {
     /* armazenamento indisponível: segue apenas em memória */
   }
@@ -168,25 +242,51 @@ function agruparDatasPorSemana(dataInicio, numSemanas, diasSelecionados) {
 }
 
 /**
- * Monta o texto pré-preenchido de uma data (feriado e/ou restrições) e marca a
- * linha com as classes correspondentes. Retorna o texto (pode ser vazio).
+ * Monta o texto pré-preenchido de uma data (feriados e/ou restrições) e marca a
+ * linha com as classes correspondentes.
+ * @returns {{texto: string, ehFeriado: boolean}}
  */
 function montarAnotacoes(dataAula, tr) {
-  const anotacoes = [];
+  const partes = [];
+  let ehFeriado = false;
+  let temRestricao = false;
 
-  const feriado = obterFeriado(dataAula);
-  if (feriado) {
-    anotacoes.push('Feriado - ' + feriado);
-    tr.classList.add('feriado');
+  const feriadoNacional = obterFeriado(dataAula);
+  if (feriadoNacional) {
+    partes.push('Feriado - ' + feriadoNacional);
+    ehFeriado = true;
   }
 
-  const restricoesData = obterRestricoesDaData(dataAula);
-  if (restricoesData.length > 0) {
-    anotacoes.push(...restricoesData);
-    tr.classList.add('restricao');
-  }
+  obterRestricoesDaData(dataAula).forEach(item => {
+    partes.push(item.feriado ? 'Feriado - ' + item.descricao : item.descricao);
+    if (item.feriado) ehFeriado = true;
+    else temRestricao = true;
+  });
 
-  return anotacoes.join(' / ');
+  if (ehFeriado) tr.classList.add('feriado');
+  if (temRestricao) tr.classList.add('restricao');
+
+  return { texto: partes.join(' / '), ehFeriado };
+}
+
+/** Cria a célula de conteúdo (alça de arrasto + textarea) de uma linha. */
+function criarCelulaConteudo(chaveCelula, placeholder, valorInicial) {
+  const td = document.createElement('td');
+  td.className = 'col-conteudo';
+
+  const handle = document.createElement('span');
+  handle.className = 'drag-handle';
+  handle.draggable = true;
+  handle.title = 'Arraste para mover o conteúdo para outra data';
+  handle.textContent = '⠿';
+
+  const textarea = document.createElement('textarea');
+  textarea.dataset.cell = chaveCelula;
+  textarea.placeholder = placeholder;
+  if (valorInicial) textarea.value = valorInicial;
+
+  td.append(handle, textarea);
+  return td;
 }
 
 /** Gera (ou regenera) a tabela do plano de ensino. */
@@ -216,7 +316,7 @@ function gerarTabela(event) {
 
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
-  ['Semana', 'Data da Aula', 'Conteúdo'].forEach(texto => {
+  ['Semana', 'Aula', 'Data da Aula', 'Conteúdo'].forEach(texto => {
     const th = document.createElement('th');
     th.textContent = texto;
     headerRow.appendChild(th);
@@ -226,6 +326,9 @@ function gerarTabela(event) {
 
   const tbody = document.createElement('tbody');
   const semanasOrdenadas = Object.keys(semanas).map(Number).sort((a, b) => a - b);
+
+  let numeroAula = 0;   // numeração sequencial (feriados não contam)
+  let totalFeriados = 0;
 
   semanasOrdenadas.forEach(semana => {
     const datas = semanas[semana];
@@ -244,19 +347,29 @@ function gerarTabela(event) {
         tr.appendChild(tdSemana);
       }
 
+      const { texto, ehFeriado } = montarAnotacoes(dataAula, tr);
+
+      // Coluna de numeração da aula (feriados ficam sem número)
+      const tdAula = document.createElement('td');
+      tdAula.className = 'col-aula';
+      if (ehFeriado) {
+        tdAula.textContent = '—';
+        totalFeriados++;
+      } else {
+        tdAula.textContent = ++numeroAula;
+      }
+      tr.appendChild(tdAula);
+
       const tdData = document.createElement('td');
       tdData.textContent = formatarDiaMes(dataAula);
       tdData.className = 'col-data';
       tr.appendChild(tdData);
 
-      const tdConteudo = document.createElement('td');
-      tdConteudo.className = 'col-conteudo';
-      const textarea = document.createElement('textarea');
-      textarea.dataset.cell = formatarISO(dataAula);
-      textarea.placeholder = 'Conteúdo para ' + formatarDiaMes(dataAula);
-      textarea.value = montarAnotacoes(dataAula, tr);
-      tdConteudo.appendChild(textarea);
-      tr.appendChild(tdConteudo);
+      tr.appendChild(criarCelulaConteudo(
+        formatarISO(dataAula),
+        'Conteúdo para ' + formatarDiaMes(dataAula),
+        texto
+      ));
 
       tbody.appendChild(tr);
     });
@@ -266,28 +379,45 @@ function gerarTabela(event) {
       const trHybrid = document.createElement('tr');
       trHybrid.classList.add('ead');
 
+      const tdAulaEaD = document.createElement('td');
+      tdAulaEaD.className = 'col-aula';
+      tdAulaEaD.textContent = ++numeroAula;
+      trHybrid.appendChild(tdAulaEaD);
+
       const tdEaD = document.createElement('td');
       tdEaD.textContent = 'EaD';
       tdEaD.className = 'col-data';
       trHybrid.appendChild(tdEaD);
 
-      const tdConteudoEaD = document.createElement('td');
-      tdConteudoEaD.className = 'col-conteudo';
-      const textareaEaD = document.createElement('textarea');
-      textareaEaD.dataset.cell = 'ead-' + semana;
-      textareaEaD.placeholder = 'Conteúdo EaD para semana ' + semana;
-      tdConteudoEaD.appendChild(textareaEaD);
-      trHybrid.appendChild(tdConteudoEaD);
+      trHybrid.appendChild(criarCelulaConteudo(
+        'ead-' + semana,
+        'Conteúdo EaD para semana ' + semana,
+        ''
+      ));
 
       tbody.appendChild(trHybrid);
     }
   });
 
   table.appendChild(tbody);
+  table.dataset.totalAulas = numeroAula;
 
+  // ----- Insere na página (identificação + tabela + resumo) -----
   const tableContainer = document.getElementById('tableContainer');
   tableContainer.innerHTML = '';
+
+  const blocoIdent = construirIdentificacao();
+  if (blocoIdent) tableContainer.appendChild(blocoIdent);
+
   tableContainer.appendChild(table);
+
+  const resumo = document.createElement('div');
+  resumo.className = 'plano-resumo';
+  resumo.textContent = `Total de ${numeroAula} aula${numeroAula !== 1 ? 's' : ''}` +
+    (totalFeriados > 0
+      ? ` · ${totalFeriados} feriado${totalFeriados !== 1 ? 's' : ''} não contabilizado${totalFeriados !== 1 ? 's' : ''}`
+      : '');
+  tableContainer.appendChild(resumo);
 
   // Restaura o conteúdo salvo, preservando o que o usuário já havia digitado
   // (sobrepõe os pré-preenchimentos de feriados/restrições quando houver edição)
@@ -304,8 +434,64 @@ function gerarTabela(event) {
 }
 
 /* ============================================================
+ * Reordenação de conteúdo por arrasto (drag and drop)
+ * ============================================================ */
+
+(function configurarArrasto() {
+  const container = document.getElementById('tableContainer');
+  let origemChave = null;
+
+  container.addEventListener('dragstart', e => {
+    const handle = e.target.closest('.drag-handle');
+    if (!handle) return;
+    const ta = handle.parentNode.querySelector('textarea');
+    origemChave = ta ? ta.dataset.cell : null;
+    e.dataTransfer.effectAllowed = 'move';
+  });
+
+  container.addEventListener('dragover', e => {
+    const celula = e.target.closest('.col-conteudo');
+    if (celula && origemChave) {
+      e.preventDefault();
+      celula.classList.add('drag-over');
+    }
+  });
+
+  container.addEventListener('dragleave', e => {
+    const celula = e.target.closest('.col-conteudo');
+    if (celula) celula.classList.remove('drag-over');
+  });
+
+  container.addEventListener('drop', e => {
+    const celula = e.target.closest('.col-conteudo');
+    if (!celula || !origemChave) return;
+    e.preventDefault();
+    celula.classList.remove('drag-over');
+
+    const destino = celula.querySelector('textarea');
+    const origem = container.querySelector(`textarea[data-cell="${CSS.escape(origemChave)}"]`);
+    if (origem && destino && origem !== destino) {
+      // Troca os conteúdos entre as duas datas
+      const tmp = destino.value;
+      destino.value = origem.value;
+      origem.value = tmp;
+      salvarEstado();
+    }
+    origemChave = null;
+  });
+})();
+
+/* ============================================================
  * Exportação para Excel (SheetJS)
  * ============================================================ */
+
+/** Gera um nome de arquivo a partir da disciplina (ou um padrão). */
+function nomeArquivoExcel(disciplina) {
+  const base = (disciplina || '').trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  return base ? `plano_de_ensino_${base}.xlsx` : 'plano_de_ensino.xlsx';
+}
 
 function exportarParaExcel() {
   const table = document.querySelector('#tableContainer table');
@@ -314,21 +500,47 @@ function exportarParaExcel() {
     return;
   }
 
-  // Clona a tabela e troca cada <textarea> pelo seu valor em texto, para que o
-  // conteúdo digitado apareça na planilha (a tabela original fica intacta).
+  // Clona a tabela, remove as alças de arrasto e troca cada <textarea> pelo seu
+  // valor em texto (a tabela original na página fica intacta).
   const tableClone = table.cloneNode(true);
+  tableClone.querySelectorAll('.drag-handle').forEach(h => h.remove());
   tableClone.querySelectorAll('textarea').forEach(ta => {
     ta.parentNode.replaceChild(document.createTextNode(ta.value), ta);
   });
 
-  const wb = XLSX.utils.table_to_book(tableClone, { sheet: 'Planilha' });
+  // Converte a tabela e preserva as mesclagens (coluna "Semana")
+  const wsTabela = XLSX.utils.table_to_sheet(tableClone);
+  const linhasTabela = XLSX.utils.sheet_to_json(wsTabela, { header: 1 });
+  const merges = wsTabela['!merges'] || [];
+
+  // Bloco de identificação no topo da planilha
+  const ident = coletarIdentificacao();
+  const topo = [['Plano de Ensino']];
+  CAMPOS_IDENT.forEach(([id, rotulo]) => {
+    if (ident[id].trim()) topo.push([rotulo + ':', ident[id].trim()]);
+  });
+  if (table.dataset.totalAulas) {
+    topo.push(['Total de aulas:', Number(table.dataset.totalAulas)]);
+  }
+  topo.push([]); // linha em branco separando do cabeçalho da tabela
+
+  const offset = topo.length;
+  const ws = XLSX.utils.aoa_to_sheet(topo.concat(linhasTabela));
+  ws['!merges'] = merges.map(m => ({
+    s: { r: m.s.r + offset, c: m.s.c },
+    e: { r: m.e.r + offset, c: m.e.c }
+  }));
+  ws['!cols'] = [{ wch: 8 }, { wch: 6 }, { wch: 14 }, { wch: 60 }];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Plano de Ensino');
   const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
 
   const blob = new Blob([wbout], { type: 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'plano_de_ensino.xlsx';
+  a.download = nomeArquivoExcel(ident.disciplina);
   a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
@@ -368,7 +580,32 @@ function configurarModal(overlay, { botaoAbrir, botoesFechar = [], aoAbrir } = {
 }
 
 /* ============================================================
- * Modal de restrições
+ * Tema claro/escuro
+ * ============================================================ */
+
+(function configurarTema() {
+  const btn = document.getElementById('themeToggle');
+
+  function aplicar(tema) {
+    document.documentElement.dataset.theme = tema;
+    btn.textContent = tema === 'dark' ? '☀️' : '🌙';
+  }
+
+  aplicar(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+
+  btn.addEventListener('click', () => {
+    const novo = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    aplicar(novo);
+    try {
+      localStorage.setItem('planoEnsinoTema', novo);
+    } catch (e) {
+      /* armazenamento indisponível */
+    }
+  });
+})();
+
+/* ============================================================
+ * Modal de restrições e feriados (adicionar / editar / remover)
  * ============================================================ */
 
 (function configurarModalRestricoes() {
@@ -376,8 +613,14 @@ function configurarModal(overlay, { botaoAbrir, botoesFechar = [], aoAbrir } = {
   const inputInicio = document.getElementById('restricaoInicio');
   const inputFim = document.getElementById('restricaoFim');
   const inputDescricao = document.getElementById('restricaoDescricao');
+  const inputFeriado = document.getElementById('restricaoFeriado');
+  const btnAdd = document.getElementById('addRestricao');
+  const btnCancelar = document.getElementById('cancelarEdicao');
   const listaModal = document.getElementById('modalRestricoesList');
   const listaResumo = document.getElementById('restricoesResumo');
+
+  // Índice da restrição em edição, ou null quando adicionando uma nova.
+  let editandoIndex = null;
 
   configurarModal(overlay, {
     botaoAbrir: document.getElementById('abrirModal'),
@@ -388,16 +631,34 @@ function configurarModal(overlay, { botaoAbrir, botoesFechar = [], aoAbrir } = {
     aoAbrir: () => inputInicio.focus()
   });
 
-  /** Cria o item de lista de uma restrição (descrição, período e remover). */
+  /** Cria um botão de ação (editar/remover) do item de lista. */
+  function criarBotaoAcao(classe, rotulo, simbolo, onClick) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = classe;
+    btn.setAttribute('aria-label', rotulo);
+    btn.title = rotulo;
+    btn.textContent = simbolo;
+    btn.addEventListener('click', onClick);
+    return btn;
+  }
+
+  /** Cria o item de lista de uma restrição (descrição, período e ações). */
   function criarItem(restricao, index) {
     const li = document.createElement('li');
-    li.className = 'restricao-item';
+    li.className = 'restricao-item' + (restricao.feriado ? ' is-feriado' : '');
 
     const info = document.createElement('span');
     info.className = 'restricao-info';
 
     const desc = document.createElement('strong');
     desc.textContent = restricao.descricao;
+    if (restricao.feriado) {
+      const tag = document.createElement('span');
+      tag.className = 'restricao-tag';
+      tag.textContent = 'feriado';
+      desc.append(' ', tag);
+    }
 
     const periodo = document.createElement('span');
     periodo.className = 'restricao-periodo';
@@ -407,18 +668,19 @@ function configurarModal(overlay, { botaoAbrir, botoesFechar = [], aoAbrir } = {
 
     info.append(desc, periodo);
 
-    const btnRemover = document.createElement('button');
-    btnRemover.type = 'button';
-    btnRemover.className = 'restricao-remove';
-    btnRemover.setAttribute('aria-label', 'Remover restrição');
-    btnRemover.textContent = '×';
-    btnRemover.addEventListener('click', () => {
-      restricoes.splice(index, 1);
-      salvarRestricoes();
-      render();
-    });
+    const acoes = document.createElement('span');
+    acoes.className = 'restricao-acoes';
+    acoes.append(
+      criarBotaoAcao('restricao-edit', 'Editar restrição', '✎', () => entrarModoEdicao(index)),
+      criarBotaoAcao('restricao-remove', 'Remover restrição', '×', () => {
+        restricoes.splice(index, 1);
+        salvarRestricoes();
+        sairModoEdicao();
+        render();
+      })
+    );
 
-    li.append(info, btnRemover);
+    li.append(info, acoes);
     return li;
   }
 
@@ -441,6 +703,34 @@ function configurarModal(overlay, { botaoAbrir, botoesFechar = [], aoAbrir } = {
     });
   }
 
+  function limparFormulario() {
+    inputInicio.value = '';
+    inputFim.value = '';
+    inputFim.removeAttribute('min');
+    inputDescricao.value = '';
+    inputFeriado.checked = false;
+  }
+
+  function entrarModoEdicao(index) {
+    const r = restricoes[index];
+    editandoIndex = index;
+    inputInicio.value = r.inicio;
+    inputFim.value = r.fim;
+    inputFim.min = r.inicio;
+    inputDescricao.value = r.descricao;
+    inputFeriado.checked = !!r.feriado;
+    btnAdd.textContent = 'Salvar alteração';
+    btnCancelar.hidden = false;
+    inputInicio.focus();
+  }
+
+  function sairModoEdicao() {
+    editandoIndex = null;
+    limparFormulario();
+    btnAdd.textContent = 'Adicionar';
+    btnCancelar.hidden = true;
+  }
+
   // Ao escolher o início, o fim assume o mesmo dia (ajustável depois) e nunca
   // pode ser anterior ao início.
   inputInicio.addEventListener('change', () => {
@@ -450,29 +740,32 @@ function configurarModal(overlay, { botaoAbrir, botoesFechar = [], aoAbrir } = {
     }
   });
 
-  document.getElementById('addRestricao').addEventListener('click', () => {
+  btnAdd.addEventListener('click', () => {
     const inicio = inputInicio.value;
     const descricao = inputDescricao.value.trim();
     if (!inicio) {
-      alert('Informe a data de início da restrição.');
+      alert('Informe a data de início.');
       return;
     }
     if (!descricao) {
-      alert('Informe a descrição da restrição.');
+      alert('Informe a descrição.');
       return;
     }
 
     const fim = inputFim.value && inputFim.value >= inicio ? inputFim.value : inicio;
-    restricoes.push({ inicio, fim, descricao });
+    const dados = { inicio, fim, descricao, feriado: inputFeriado.checked };
+
+    if (editandoIndex !== null) {
+      restricoes[editandoIndex] = dados;
+    } else {
+      restricoes.push(dados);
+    }
     salvarRestricoes();
     render();
-
-    inputInicio.value = '';
-    inputFim.value = '';
-    inputFim.removeAttribute('min');
-    inputDescricao.value = '';
-    inputInicio.focus();
+    sairModoEdicao();
   });
+
+  btnCancelar.addEventListener('click', sairModoEdicao);
 
   carregarRestricoes();
   render();
@@ -499,7 +792,10 @@ document.getElementById('configForm').addEventListener('submit', gerarTabela);
 document.getElementById('exportBtn').addEventListener('click', exportarParaExcel);
 
 // Salvamento automático a cada modificação no formulário ou na tabela
-document.getElementById('configForm').addEventListener('input', salvarEstado);
+document.getElementById('configForm').addEventListener('input', () => {
+  salvarEstado();
+  atualizarBlocoIdentificacao();
+});
 document.getElementById('configForm').addEventListener('change', salvarEstado);
 document.getElementById('tableContainer').addEventListener('input', salvarEstado);
 
@@ -510,6 +806,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
   if (estado && estado.config) {
     const c = estado.config;
+    if (c.identificacao) {
+      CAMPOS_IDENT.forEach(([id]) => {
+        document.getElementById(id).value = c.identificacao[id] || '';
+      });
+    }
     if (c.numSemanas) document.getElementById('numSemanas').value = c.numSemanas;
     if (c.dataInicio) inputData.value = c.dataInicio;
     document.getElementById('hybridCheckbox').checked = !!c.hybrid;
