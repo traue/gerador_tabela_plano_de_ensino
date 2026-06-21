@@ -15,6 +15,47 @@ function formatDate(date) {
   return `${d}/${m}`;
 }
 
+// Converte 'yyyy-mm-dd' em uma data no fuso local (evita o deslocamento de
+// dia que ocorre ao usar new Date('yyyy-mm-dd'), interpretada como UTC).
+function parseLocalDate(str) {
+  const [ano, mes, dia] = str.split('-').map(Number);
+  return new Date(ano, mes - 1, dia);
+}
+
+// Gera um número comparável (yyyymmdd) a partir de uma data local.
+function ymd(date) {
+  return date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+}
+
+// ===== Restrições de período =====
+const STORAGE_RESTRICOES = 'restricoesPlanoEnsino';
+let restricoes = [];
+
+function carregarRestricoes() {
+  try {
+    const dados = localStorage.getItem(STORAGE_RESTRICOES);
+    if (dados) restricoes = JSON.parse(dados);
+  } catch (e) {
+    restricoes = [];
+  }
+}
+
+function salvarRestricoes() {
+  try {
+    localStorage.setItem(STORAGE_RESTRICOES, JSON.stringify(restricoes));
+  } catch (e) {
+    /* armazenamento indisponível: mantém apenas em memória */
+  }
+}
+
+// Retorna as descrições das restrições cujo período contém a data informada.
+function obterRestricoesDaData(data) {
+  const chave = ymd(data);
+  return restricoes
+    .filter(r => ymd(parseLocalDate(r.inicio)) <= chave && chave <= ymd(parseLocalDate(r.fim)))
+    .map(r => r.descricao);
+}
+
 // Função para gerar a tabela agrupada por semana (com mesclagem na primeira coluna e linha EaD se híbrida)
 function gerarTabela(event) {
   event.preventDefault();
@@ -110,11 +151,20 @@ function gerarTabela(event) {
       tdConteudo.className = 'col-conteudo';
       const textarea = document.createElement('textarea');
       textarea.placeholder = "Conteúdo para " + formatDate(dataAula);
-      // Se a data da aula cair em um feriado, pré-preenche o conteúdo
+      // Pré-preenche o conteúdo com feriados e/ou restrições da data
+      const anotacoes = [];
       const feriado = obterFeriado(dataAula);
       if (feriado) {
-        textarea.value = "Feriado - " + feriado;
+        anotacoes.push("Feriado - " + feriado);
         tr.classList.add('feriado');
+      }
+      const restricoesData = obterRestricoesDaData(dataAula);
+      if (restricoesData.length > 0) {
+        restricoesData.forEach(desc => anotacoes.push(desc));
+        tr.classList.add('restricao');
+      }
+      if (anotacoes.length > 0) {
+        textarea.value = anotacoes.join(' / ');
       }
       tdConteudo.appendChild(textarea);
       tr.appendChild(tdConteudo);
@@ -189,3 +239,126 @@ function exportarParaExcel() {
 
 document.getElementById('configForm').addEventListener('submit', gerarTabela);
 document.getElementById('exportBtn').addEventListener('click', exportarParaExcel);
+
+// ===== Interface do modal de restrições =====
+(function configurarModalRestricoes() {
+  const overlay = document.getElementById('restricaoModal');
+  const btnAbrir = document.getElementById('abrirModal');
+  const btnFechar = document.getElementById('fecharModal');
+  const btnConcluir = document.getElementById('concluirModal');
+  const btnAdd = document.getElementById('addRestricao');
+  const inputInicio = document.getElementById('restricaoInicio');
+  const inputFim = document.getElementById('restricaoFim');
+  const inputDescricao = document.getElementById('restricaoDescricao');
+  const listaModal = document.getElementById('modalRestricoesList');
+  const listaResumo = document.getElementById('restricoesResumo');
+
+  // Cria o item de uma restrição (descrição, período e botão de remover).
+  function criarItem(restricao, index) {
+    const li = document.createElement('li');
+    li.className = 'restricao-item';
+
+    const info = document.createElement('span');
+    info.className = 'restricao-info';
+    const desc = document.createElement('strong');
+    desc.textContent = restricao.descricao;
+    const periodo = document.createElement('span');
+    periodo.className = 'restricao-periodo';
+    periodo.textContent =
+      formatDate(parseLocalDate(restricao.inicio)) +
+      ' – ' +
+      formatDate(parseLocalDate(restricao.fim));
+    info.appendChild(desc);
+    info.appendChild(periodo);
+
+    const btnRemover = document.createElement('button');
+    btnRemover.type = 'button';
+    btnRemover.className = 'restricao-remove';
+    btnRemover.setAttribute('aria-label', 'Remover restrição');
+    btnRemover.textContent = '×';
+    btnRemover.addEventListener('click', () => {
+      restricoes.splice(index, 1);
+      salvarRestricoes();
+      render();
+    });
+
+    li.appendChild(info);
+    li.appendChild(btnRemover);
+    return li;
+  }
+
+  // Atualiza as duas listas (modal e resumo no formulário).
+  function render() {
+    [listaModal, listaResumo].forEach(ul => {
+      if (!ul) return;
+      ul.innerHTML = '';
+      if (restricoes.length === 0) {
+        if (ul === listaModal) {
+          const vazio = document.createElement('li');
+          vazio.className = 'restricao-vazia';
+          vazio.textContent = 'Nenhuma restrição adicionada.';
+          ul.appendChild(vazio);
+        }
+        return;
+      }
+      restricoes.forEach((r, i) => ul.appendChild(criarItem(r, i)));
+    });
+  }
+
+  function abrir() {
+    overlay.hidden = false;
+    document.body.style.overflow = 'hidden';
+    inputInicio.focus();
+  }
+
+  function fechar() {
+    overlay.hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  // Ao escolher o início, o fim passa a valer o mesmo dia (ajustável depois).
+  inputInicio.addEventListener('change', () => {
+    inputFim.min = inputInicio.value;
+    if (!inputFim.value || inputFim.value < inputInicio.value) {
+      inputFim.value = inputInicio.value;
+    }
+  });
+
+  btnAdd.addEventListener('click', () => {
+    const inicio = inputInicio.value;
+    const descricao = inputDescricao.value.trim();
+    if (!inicio) {
+      alert('Informe a data de início da restrição.');
+      return;
+    }
+    if (!descricao) {
+      alert('Informe a descrição da restrição.');
+      return;
+    }
+    let fim = inputFim.value || inicio;
+    if (fim < inicio) fim = inicio;
+
+    restricoes.push({ inicio, fim, descricao });
+    salvarRestricoes();
+    render();
+
+    inputInicio.value = '';
+    inputFim.value = '';
+    inputFim.removeAttribute('min');
+    inputDescricao.value = '';
+    inputInicio.focus();
+  });
+
+  btnAbrir.addEventListener('click', abrir);
+  btnFechar.addEventListener('click', fechar);
+  btnConcluir.addEventListener('click', fechar);
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) fechar();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !overlay.hidden) fechar();
+  });
+
+  carregarRestricoes();
+  render();
+})();

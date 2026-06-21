@@ -53,6 +53,14 @@
         <label for="hybridCheckbox">Incluir EaD?</label>
         <label><input type="checkbox" id="hybridCheckbox" name="hybridCheckbox" />  Sim</label>
       </div>
+      <!-- Restrições de período (gerenciadas via modal) -->
+      <div class="form-group">
+        <label>Restrições de período:</label>
+        <button type="button" class="btn-secondary" id="abrirModal">
+          ➕ Adicionar restrições
+        </button>
+        <ul id="restricoesResumo" class="restricoes-list"></ul>
+      </div>
       <!-- Botão Gerar Tabela em largura total -->
       <button type="submit" class="btn full-width">Gerar Tabela</button>
     </form>
@@ -71,6 +79,39 @@
       <a href="https://github.com/traue/gerador_tabela_plano_de_ensino/">Projeto no GitHub</a>
     </p>
   </footer>
+
+  <!-- Modal de restrições de período -->
+  <div id="restricaoModal" class="modal-overlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="restricaoTitulo">
+      <div class="modal-header">
+        <h2 id="restricaoTitulo">Restrições de período</h2>
+        <button type="button" class="modal-close" id="fecharModal" aria-label="Fechar">×</button>
+      </div>
+      <p class="modal-sub">
+        Cadastre períodos como semana de provas ou de palestras. As datas de aula
+        dentro do período recebem a descrição automaticamente na tabela.
+      </p>
+      <div class="restricao-form">
+        <div class="rf-row">
+          <div class="rf-field">
+            <label for="restricaoInicio">Início</label>
+            <input type="date" id="restricaoInicio" />
+          </div>
+          <div class="rf-field">
+            <label for="restricaoFim">Fim</label>
+            <input type="date" id="restricaoFim" />
+          </div>
+        </div>
+        <div class="rf-field">
+          <label for="restricaoDescricao">Descrição</label>
+          <input type="text" id="restricaoDescricao" placeholder="Ex.: Semana de provas" />
+        </div>
+        <button type="button" class="btn" id="addRestricao">Adicionar restrição</button>
+      </div>
+      <ul id="modalRestricoesList" class="restricoes-list"></ul>
+      <button type="button" class="btn full-width" id="concluirModal">Concluir</button>
+    </div>
+  </div>
 
   <!-- Biblioteca SheetJS para exportação em XLSX -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
