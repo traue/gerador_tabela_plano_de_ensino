@@ -97,14 +97,17 @@ function gerarTabela(event) {
         const tdSemana = document.createElement('td');
         tdSemana.textContent = semana;
         tdSemana.rowSpan = totalRows;
+        tdSemana.className = 'col-semana';
         tr.appendChild(tdSemana);
       }
       // Coluna da data da aula
       const tdData = document.createElement('td');
       tdData.textContent = formatDate(dataAula);
+      tdData.className = 'col-data';
       tr.appendChild(tdData);
       // Coluna para o conteúdo (textarea)
       const tdConteudo = document.createElement('td');
+      tdConteudo.className = 'col-conteudo';
       const textarea = document.createElement('textarea');
       textarea.placeholder = "Conteúdo para " + formatDate(dataAula);
       // Se a data da aula cair em um feriado, pré-preenche o conteúdo
@@ -122,12 +125,15 @@ function gerarTabela(event) {
     // Se for híbrida, adiciona uma linha extra para EaD
     if (isHybrid) {
       const trHybrid = document.createElement('tr');
+      trHybrid.classList.add('ead');
       // Não adiciona a célula da semana, pois ela já está mesclada
       const tdEaD = document.createElement('td');
       tdEaD.textContent = "EaD";
+      tdEaD.className = 'col-data';
       trHybrid.appendChild(tdEaD);
-      
+
       const tdConteudoEaD = document.createElement('td');
+      tdConteudoEaD.className = 'col-conteudo';
       const textareaEaD = document.createElement('textarea');
       textareaEaD.placeholder = "Conteúdo EaD para semana " + semana;
       tdConteudoEaD.appendChild(textareaEaD);
