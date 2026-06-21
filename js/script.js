@@ -1,11 +1,33 @@
-// Ao carregar a página, define a data atual no input de data
+// Ao carregar a página, restaura o estado salvo (ou usa a data atual)
 window.addEventListener('DOMContentLoaded', () => {
-  const hoje = new Date();
-  // Formata a data para yyyy-mm-dd
-  const ano = hoje.getFullYear();
-  const mes = String(hoje.getMonth() + 1).padStart(2, '0');
-  const dia = String(hoje.getDate()).padStart(2, '0');
-  document.getElementById('dataInicio').value = `${ano}-${mes}-${dia}`;
+  const estado = carregarEstado();
+
+  if (estado && estado.config) {
+    const c = estado.config;
+    if (c.numSemanas) document.getElementById('numSemanas').value = c.numSemanas;
+    if (c.dataInicio) document.getElementById('dataInicio').value = c.dataInicio;
+    document.getElementById('hybridCheckbox').checked = !!c.hybrid;
+    if (Array.isArray(c.dias)) {
+      document.querySelectorAll('input[name="dias"]').forEach(el => {
+        el.checked = c.dias.includes(el.value);
+      });
+    }
+  }
+
+  // Sem data salva: usa a data de hoje
+  if (!document.getElementById('dataInicio').value) {
+    const hoje = new Date();
+    const ano = hoje.getFullYear();
+    const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+    const dia = String(hoje.getDate()).padStart(2, '0');
+    document.getElementById('dataInicio').value = `${ano}-${mes}-${dia}`;
+  }
+
+  // Regenera a tabela se havia uma salva, preservando o conteúdo digitado
+  if (estado && estado.tabelaGerada && estado.config &&
+      Array.isArray(estado.config.dias) && estado.config.dias.length > 0) {
+    gerarTabela();
+  }
 });
 
 // Função auxiliar para formatar datas no padrão dd/mm (sem o ano)
@@ -56,10 +78,60 @@ function obterRestricoesDaData(data) {
     .map(r => r.descricao);
 }
 
+// ===== Salvamento automático do estado (formulário + tabela) =====
+const STORAGE_ESTADO = 'planoEnsinoEstado';
+
+// Gera a chave 'yyyy-mm-dd' usada para identificar a célula de uma data.
+function keyData(date) {
+  const ano = date.getFullYear();
+  const mes = String(date.getMonth() + 1).padStart(2, '0');
+  const dia = String(date.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
+}
+
+// Lê o conteúdo atual de todas as células da tabela (indexado por célula).
+function coletarConteudos() {
+  const conteudos = {};
+  document.querySelectorAll('#tableContainer textarea[data-cell]').forEach(ta => {
+    conteudos[ta.dataset.cell] = ta.value;
+  });
+  return conteudos;
+}
+
+// Salva o estado completo no localStorage. Chamado a cada modificação.
+function salvarEstado() {
+  try {
+    const estado = {
+      config: {
+        numSemanas: document.getElementById('numSemanas').value,
+        dataInicio: document.getElementById('dataInicio').value,
+        dias: Array.from(document.querySelectorAll('input[name="dias"]:checked'))
+          .map(el => el.value),
+        hybrid: document.getElementById('hybridCheckbox').checked
+      },
+      conteudos: coletarConteudos(),
+      tabelaGerada: !!document.querySelector('#tableContainer table')
+    };
+    localStorage.setItem(STORAGE_ESTADO, JSON.stringify(estado));
+  } catch (e) {
+    /* armazenamento indisponível: segue apenas em memória */
+  }
+}
+
+// Recupera o estado salvo, ou null se não houver.
+function carregarEstado() {
+  try {
+    const dados = localStorage.getItem(STORAGE_ESTADO);
+    return dados ? JSON.parse(dados) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 // Função para gerar a tabela agrupada por semana (com mesclagem na primeira coluna e linha EaD se híbrida)
 function gerarTabela(event) {
-  event.preventDefault();
-  
+  if (event) event.preventDefault();
+
   const numSemanas = parseInt(document.getElementById('numSemanas').value);
   const dataInicioInput = document.getElementById('dataInicio').value;
   if (!dataInicioInput) {
@@ -150,6 +222,7 @@ function gerarTabela(event) {
       const tdConteudo = document.createElement('td');
       tdConteudo.className = 'col-conteudo';
       const textarea = document.createElement('textarea');
+      textarea.dataset.cell = keyData(dataAula);
       textarea.placeholder = "Conteúdo para " + formatDate(dataAula);
       // Pré-preenche o conteúdo com feriados e/ou restrições da data
       const anotacoes = [];
@@ -185,6 +258,7 @@ function gerarTabela(event) {
       const tdConteudoEaD = document.createElement('td');
       tdConteudoEaD.className = 'col-conteudo';
       const textareaEaD = document.createElement('textarea');
+      textareaEaD.dataset.cell = 'ead-' + semana;
       textareaEaD.placeholder = "Conteúdo EaD para semana " + semana;
       tdConteudoEaD.appendChild(textareaEaD);
       trHybrid.appendChild(tdConteudoEaD);
@@ -195,9 +269,22 @@ function gerarTabela(event) {
   
   table.appendChild(tbody);
   tableContainer.appendChild(table);
-  
+
+  // Restaura o conteúdo salvo, preservando o que o usuário já havia digitado
+  // (sobrepõe os pré-preenchimentos de feriados/restrições quando houver edição)
+  const estado = carregarEstado();
+  const salvos = estado && estado.conteudos ? estado.conteudos : {};
+  tableContainer.querySelectorAll('textarea[data-cell]').forEach(ta => {
+    if (Object.prototype.hasOwnProperty.call(salvos, ta.dataset.cell)) {
+      ta.value = salvos[ta.dataset.cell];
+    }
+  });
+
   // Exibe o botão de exportação
   document.getElementById('exportBtn').style.display = 'inline-block';
+
+  // Persiste o estado (inclusive os conteúdos pré-preenchidos)
+  salvarEstado();
 }
 
 // Função para exportar a tabela para um arquivo XLSX (utilizando SheetJS)
@@ -239,6 +326,11 @@ function exportarParaExcel() {
 
 document.getElementById('configForm').addEventListener('submit', gerarTabela);
 document.getElementById('exportBtn').addEventListener('click', exportarParaExcel);
+
+// Salvamento automático a cada modificação no formulário ou na tabela
+document.getElementById('configForm').addEventListener('input', salvarEstado);
+document.getElementById('configForm').addEventListener('change', salvarEstado);
+document.getElementById('tableContainer').addEventListener('input', salvarEstado);
 
 // ===== Interface do modal de restrições =====
 (function configurarModalRestricoes() {
