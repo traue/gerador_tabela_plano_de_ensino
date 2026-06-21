@@ -1,67 +1,71 @@
-// Ao carregar a página, restaura o estado salvo (ou usa a data atual)
-window.addEventListener('DOMContentLoaded', () => {
-  const estado = carregarEstado();
+'use strict';
 
-  if (estado && estado.config) {
-    const c = estado.config;
-    if (c.numSemanas) document.getElementById('numSemanas').value = c.numSemanas;
-    if (c.dataInicio) document.getElementById('dataInicio').value = c.dataInicio;
-    document.getElementById('hybridCheckbox').checked = !!c.hybrid;
-    if (Array.isArray(c.dias)) {
-      document.querySelectorAll('input[name="dias"]').forEach(el => {
-        el.checked = c.dias.includes(el.value);
-      });
-    }
-  }
+/**
+ * Gerador de Tabela do Plano de Ensino
+ *
+ * Aplicação estática que monta uma tabela de aulas por semana a partir de uma
+ * configuração simples (nº de semanas, data de início e dias da semana).
+ * Recursos: pré-preenchimento de feriados e restrições de período, salvamento
+ * automático no navegador e exportação para Excel.
+ *
+ * Depende de `feriados.js` (função global `obterFeriado`) e da biblioteca
+ * SheetJS (`XLSX`), ambas carregadas antes deste arquivo.
+ */
 
-  // Sem data salva: usa a data de hoje
-  if (!document.getElementById('dataInicio').value) {
-    const hoje = new Date();
-    const ano = hoje.getFullYear();
-    const mes = String(hoje.getMonth() + 1).padStart(2, '0');
-    const dia = String(hoje.getDate()).padStart(2, '0');
-    document.getElementById('dataInicio').value = `${ano}-${mes}-${dia}`;
-  }
+/* ============================================================
+ * Utilitários de data
+ * ============================================================ */
 
-  // Regenera a tabela se havia uma salva, preservando o conteúdo digitado
-  if (estado && estado.tabelaGerada && estado.config &&
-      Array.isArray(estado.config.dias) && estado.config.dias.length > 0) {
-    gerarTabela();
-  }
-});
-
-// Função auxiliar para formatar datas no padrão dd/mm (sem o ano)
-function formatDate(date) {
-  const d = date.getDate().toString().padStart(2, '0');
-  const m = (date.getMonth() + 1).toString().padStart(2, '0');
-  return `${d}/${m}`;
+/** Formata uma data como 'dd/mm' (sem o ano), para exibição. */
+function formatarDiaMes(date) {
+  const dia = String(date.getDate()).padStart(2, '0');
+  const mes = String(date.getMonth() + 1).padStart(2, '0');
+  return `${dia}/${mes}`;
 }
 
-// Converte 'yyyy-mm-dd' em uma data no fuso local (evita o deslocamento de
-// dia que ocorre ao usar new Date('yyyy-mm-dd'), interpretada como UTC).
+/** Formata uma data como 'yyyy-mm-dd' no fuso local (chave estável). */
+function formatarISO(date) {
+  const ano = date.getFullYear();
+  const mes = String(date.getMonth() + 1).padStart(2, '0');
+  const dia = String(date.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
+}
+
+/**
+ * Converte 'yyyy-mm-dd' em uma data no fuso local.
+ * Evita o deslocamento de um dia causado por `new Date('yyyy-mm-dd')`, que é
+ * interpretada como meia-noite em UTC.
+ */
 function parseLocalDate(str) {
   const [ano, mes, dia] = str.split('-').map(Number);
   return new Date(ano, mes - 1, dia);
 }
 
-// Gera um número comparável (yyyymmdd) a partir de uma data local.
+/** Gera um inteiro comparável (yyyymmdd) a partir de uma data local. */
 function ymd(date) {
   return date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
 }
 
-// ===== Restrições de período =====
+/* ============================================================
+ * Restrições de período
+ * ============================================================ */
+
 const STORAGE_RESTRICOES = 'restricoesPlanoEnsino';
+
+/** Lista de restrições em memória: { inicio, fim, descricao }. */
 let restricoes = [];
 
+/** Carrega as restrições do localStorage (ignora dados inválidos). */
 function carregarRestricoes() {
   try {
-    const dados = localStorage.getItem(STORAGE_RESTRICOES);
-    if (dados) restricoes = JSON.parse(dados);
+    const dados = JSON.parse(localStorage.getItem(STORAGE_RESTRICOES));
+    restricoes = Array.isArray(dados) ? dados : [];
   } catch (e) {
     restricoes = [];
   }
 }
 
+/** Persiste as restrições no localStorage. */
 function salvarRestricoes() {
   try {
     localStorage.setItem(STORAGE_RESTRICOES, JSON.stringify(restricoes));
@@ -70,7 +74,7 @@ function salvarRestricoes() {
   }
 }
 
-// Retorna as descrições das restrições cujo período contém a data informada.
+/** Retorna as descrições das restrições cujo período contém a data informada. */
 function obterRestricoesDaData(data) {
   const chave = ymd(data);
   return restricoes
@@ -78,18 +82,13 @@ function obterRestricoesDaData(data) {
     .map(r => r.descricao);
 }
 
-// ===== Salvamento automático do estado (formulário + tabela) =====
+/* ============================================================
+ * Salvamento automático (configuração + conteúdo da tabela)
+ * ============================================================ */
+
 const STORAGE_ESTADO = 'planoEnsinoEstado';
 
-// Gera a chave 'yyyy-mm-dd' usada para identificar a célula de uma data.
-function keyData(date) {
-  const ano = date.getFullYear();
-  const mes = String(date.getMonth() + 1).padStart(2, '0');
-  const dia = String(date.getDate()).padStart(2, '0');
-  return `${ano}-${mes}-${dia}`;
-}
-
-// Lê o conteúdo atual de todas as células da tabela (indexado por célula).
+/** Lê o conteúdo de todas as células da tabela, indexado pela chave da célula. */
 function coletarConteudos() {
   const conteudos = {};
   document.querySelectorAll('#tableContainer textarea[data-cell]').forEach(ta => {
@@ -98,7 +97,7 @@ function coletarConteudos() {
   return conteudos;
 }
 
-// Salva o estado completo no localStorage. Chamado a cada modificação.
+/** Salva o estado completo (formulário + conteúdos) no localStorage. */
 function salvarEstado() {
   try {
     const estado = {
@@ -118,18 +117,16 @@ function salvarEstado() {
   }
 }
 
-// Recupera o estado salvo, ou null se não houver.
+/** Recupera o estado salvo, ou null se não houver / for inválido. */
 function carregarEstado() {
   try {
-    const dados = localStorage.getItem(STORAGE_ESTADO);
-    return dados ? JSON.parse(dados) : null;
+    return JSON.parse(localStorage.getItem(STORAGE_ESTADO));
   } catch (e) {
     return null;
   }
 }
 
-// Apaga todo o estado salvo (plano + restrições) e recarrega a página,
-// voltando aos valores padrão.
+/** Apaga todo o estado salvo (plano + restrições) e recarrega a página. */
 function resetarTudo() {
   try {
     localStorage.removeItem(STORAGE_ESTADO);
@@ -140,84 +137,105 @@ function resetarTudo() {
   location.reload();
 }
 
-// Função para gerar a tabela agrupada por semana (com mesclagem na primeira coluna e linha EaD se híbrida)
+/* ============================================================
+ * Geração da tabela
+ * ============================================================ */
+
+/**
+ * Agrupa as datas de aula por semana, a partir da configuração do formulário.
+ * @returns {Object<number, Date[]>} mapa do nº da semana para suas datas.
+ */
+function agruparDatasPorSemana(dataInicio, numSemanas, diasSelecionados) {
+  const semanas = {};
+  for (let i = 0; i < numSemanas; i++) {
+    const inicioSemana = new Date(dataInicio);
+    inicioSemana.setDate(inicioSemana.getDate() + i * 7);
+
+    for (let d = 0; d < 7; d++) {
+      const dataAtual = new Date(inicioSemana);
+      dataAtual.setDate(dataAtual.getDate() + d);
+
+      // Ignora datas anteriores ao início, possíveis apenas na primeira semana
+      if (i === 0 && dataAtual < dataInicio) continue;
+      if (!diasSelecionados.includes(dataAtual.getDay())) continue;
+
+      const diffDias = Math.floor((dataAtual - dataInicio) / 86400000);
+      const semana = Math.floor(diffDias / 7) + 1;
+      (semanas[semana] = semanas[semana] || []).push(dataAtual);
+    }
+  }
+  return semanas;
+}
+
+/**
+ * Monta o texto pré-preenchido de uma data (feriado e/ou restrições) e marca a
+ * linha com as classes correspondentes. Retorna o texto (pode ser vazio).
+ */
+function montarAnotacoes(dataAula, tr) {
+  const anotacoes = [];
+
+  const feriado = obterFeriado(dataAula);
+  if (feriado) {
+    anotacoes.push('Feriado - ' + feriado);
+    tr.classList.add('feriado');
+  }
+
+  const restricoesData = obterRestricoesDaData(dataAula);
+  if (restricoesData.length > 0) {
+    anotacoes.push(...restricoesData);
+    tr.classList.add('restricao');
+  }
+
+  return anotacoes.join(' / ');
+}
+
+/** Gera (ou regenera) a tabela do plano de ensino. */
 function gerarTabela(event) {
   if (event) event.preventDefault();
 
-  const numSemanas = parseInt(document.getElementById('numSemanas').value);
+  const numSemanas = parseInt(document.getElementById('numSemanas').value, 10);
   const dataInicioInput = document.getElementById('dataInicio').value;
   if (!dataInicioInput) {
     alert('Por favor, informe a data de início.');
     return;
   }
-  const dataInicio = new Date(dataInicioInput);
-  dataInicio.setHours(0,0,0,0);
-  
-  // Obtém os dias da semana selecionados
+
   const diasSelecionados = Array.from(document.querySelectorAll('input[name="dias"]:checked'))
-                                .map(el => parseInt(el.value));
+    .map(el => parseInt(el.value, 10));
   if (diasSelecionados.length === 0) {
     alert('Selecione ao menos um dia de aula.');
     return;
   }
-  
-  // Verifica se a disciplina é híbrida
+
+  const dataInicio = parseLocalDate(dataInicioInput);
   const isHybrid = document.getElementById('hybridCheckbox').checked;
-  
-  // Agrupa as datas por semana
-  const semanas = {};
-  for (let i = 0; i < numSemanas; i++) {
-    const weekStart = new Date(dataInicio);
-    weekStart.setDate(weekStart.getDate() + (i * 7));
-    // Para cada dia da semana
-    for (let d = 0; d < 7; d++) {
-      const currentDate = new Date(weekStart);
-      currentDate.setDate(currentDate.getDate() + d);
-      // Ignora datas anteriores à data de início na primeira semana
-      if (i === 0 && currentDate < dataInicio) continue;
-      if (diasSelecionados.includes(currentDate.getDay())) {
-        // Calcula o número da semana com base na diferença de dias
-        const diffDays = Math.floor((currentDate - dataInicio) / (1000 * 60 * 60 * 24));
-        const semana = Math.floor(diffDays / 7) + 1;
-        if (!semanas[semana]) {
-          semanas[semana] = [];
-        }
-        semanas[semana].push(new Date(currentDate));
-      }
-    }
-  }
-  
-  // Cria a tabela
-  const tableContainer = document.getElementById('tableContainer');
-  tableContainer.innerHTML = "";
+  const semanas = agruparDatasPorSemana(dataInicio, numSemanas, diasSelecionados);
+
+  // ----- Monta a tabela -----
   const table = document.createElement('table');
-  
-  // Cabeçalho
+
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
-  ['Semana', 'Data da Aula', 'Conteúdo'].forEach(text => {
+  ['Semana', 'Data da Aula', 'Conteúdo'].forEach(texto => {
     const th = document.createElement('th');
-    th.textContent = text;
+    th.textContent = texto;
     headerRow.appendChild(th);
   });
   thead.appendChild(headerRow);
   table.appendChild(thead);
-  
-  // Corpo da tabela
+
   const tbody = document.createElement('tbody');
-  // Ordena as semanas em ordem crescente
-  const semanasOrdenadas = Object.keys(semanas)
-                                 .map(Number)
-                                 .sort((a, b) => a - b);
+  const semanasOrdenadas = Object.keys(semanas).map(Number).sort((a, b) => a - b);
+
   semanasOrdenadas.forEach(semana => {
     const datas = semanas[semana];
-    // Calcula o número total de linhas para o grupo:
-    // número de dias + 1 se híbrida
+    // Total de linhas do grupo: uma por data, mais a linha de EaD se híbrida
     const totalRows = datas.length + (isHybrid ? 1 : 0);
-    
+
     datas.forEach((dataAula, index) => {
       const tr = document.createElement('tr');
-      // Para a primeira linha do grupo, cria a célula da semana com rowspan
+
+      // Primeira linha do grupo: célula da semana mesclada via rowspan
       if (index === 0) {
         const tdSemana = document.createElement('td');
         tdSemana.textContent = semana;
@@ -225,45 +243,31 @@ function gerarTabela(event) {
         tdSemana.className = 'col-semana';
         tr.appendChild(tdSemana);
       }
-      // Coluna da data da aula
+
       const tdData = document.createElement('td');
-      tdData.textContent = formatDate(dataAula);
+      tdData.textContent = formatarDiaMes(dataAula);
       tdData.className = 'col-data';
       tr.appendChild(tdData);
-      // Coluna para o conteúdo (textarea)
+
       const tdConteudo = document.createElement('td');
       tdConteudo.className = 'col-conteudo';
       const textarea = document.createElement('textarea');
-      textarea.dataset.cell = keyData(dataAula);
-      textarea.placeholder = "Conteúdo para " + formatDate(dataAula);
-      // Pré-preenche o conteúdo com feriados e/ou restrições da data
-      const anotacoes = [];
-      const feriado = obterFeriado(dataAula);
-      if (feriado) {
-        anotacoes.push("Feriado - " + feriado);
-        tr.classList.add('feriado');
-      }
-      const restricoesData = obterRestricoesDaData(dataAula);
-      if (restricoesData.length > 0) {
-        restricoesData.forEach(desc => anotacoes.push(desc));
-        tr.classList.add('restricao');
-      }
-      if (anotacoes.length > 0) {
-        textarea.value = anotacoes.join(' / ');
-      }
+      textarea.dataset.cell = formatarISO(dataAula);
+      textarea.placeholder = 'Conteúdo para ' + formatarDiaMes(dataAula);
+      textarea.value = montarAnotacoes(dataAula, tr);
       tdConteudo.appendChild(textarea);
       tr.appendChild(tdConteudo);
 
       tbody.appendChild(tr);
     });
-    
-    // Se for híbrida, adiciona uma linha extra para EaD
+
+    // Linha extra de EaD (uma por semana) quando a disciplina é híbrida
     if (isHybrid) {
       const trHybrid = document.createElement('tr');
       trHybrid.classList.add('ead');
-      // Não adiciona a célula da semana, pois ela já está mesclada
+
       const tdEaD = document.createElement('td');
-      tdEaD.textContent = "EaD";
+      tdEaD.textContent = 'EaD';
       tdEaD.className = 'col-data';
       trHybrid.appendChild(tdEaD);
 
@@ -271,60 +275,55 @@ function gerarTabela(event) {
       tdConteudoEaD.className = 'col-conteudo';
       const textareaEaD = document.createElement('textarea');
       textareaEaD.dataset.cell = 'ead-' + semana;
-      textareaEaD.placeholder = "Conteúdo EaD para semana " + semana;
+      textareaEaD.placeholder = 'Conteúdo EaD para semana ' + semana;
       tdConteudoEaD.appendChild(textareaEaD);
       trHybrid.appendChild(tdConteudoEaD);
-      
+
       tbody.appendChild(trHybrid);
     }
   });
-  
+
   table.appendChild(tbody);
+
+  const tableContainer = document.getElementById('tableContainer');
+  tableContainer.innerHTML = '';
   tableContainer.appendChild(table);
 
   // Restaura o conteúdo salvo, preservando o que o usuário já havia digitado
   // (sobrepõe os pré-preenchimentos de feriados/restrições quando houver edição)
   const estado = carregarEstado();
-  const salvos = estado && estado.conteudos ? estado.conteudos : {};
+  const salvos = (estado && estado.conteudos) || {};
   tableContainer.querySelectorAll('textarea[data-cell]').forEach(ta => {
     if (Object.prototype.hasOwnProperty.call(salvos, ta.dataset.cell)) {
       ta.value = salvos[ta.dataset.cell];
     }
   });
 
-  // Exibe o botão de exportação
   document.getElementById('exportBtn').style.display = 'inline-block';
-
-  // Persiste o estado (inclusive os conteúdos pré-preenchidos)
   salvarEstado();
 }
 
-// Função para exportar a tabela para um arquivo XLSX (utilizando SheetJS)
+/* ============================================================
+ * Exportação para Excel (SheetJS)
+ * ============================================================ */
+
 function exportarParaExcel() {
   const table = document.querySelector('#tableContainer table');
   if (!table) {
-    alert("Nenhuma tabela para exportar!");
+    alert('Nenhuma tabela para exportar!');
     return;
   }
-  
-  // Clona a tabela para não modificar a original
+
+  // Clona a tabela e troca cada <textarea> pelo seu valor em texto, para que o
+  // conteúdo digitado apareça na planilha (a tabela original fica intacta).
   const tableClone = table.cloneNode(true);
-  
-  // Substitui os campos <textarea> pelo seu valor
-  const textareas = tableClone.querySelectorAll('textarea');
-  textareas.forEach(ta => {
-    const td = ta.parentNode;
-    const text = document.createTextNode(ta.value);
-    td.replaceChild(text, ta);
+  tableClone.querySelectorAll('textarea').forEach(ta => {
+    ta.parentNode.replaceChild(document.createTextNode(ta.value), ta);
   });
-  
-  // Cria o workbook a partir da tabela clonada
-  const wb = XLSX.utils.table_to_book(tableClone, { sheet: "Planilha" });
-  
-  // Gera o arquivo XLSX em formato binário
+
+  const wb = XLSX.utils.table_to_book(tableClone, { sheet: 'Planilha' });
   const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  
-  // Cria um blob com o conteúdo e aciona o download
+
   const blob = new Blob([wbout], { type: 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -334,46 +333,79 @@ function exportarParaExcel() {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
-document.getElementById('configForm').addEventListener('submit', gerarTabela);
-document.getElementById('exportBtn').addEventListener('click', exportarParaExcel);
+/* ============================================================
+ * Modais (comportamento compartilhado)
+ * ============================================================ */
 
-// Salvamento automático a cada modificação no formulário ou na tabela
-document.getElementById('configForm').addEventListener('input', salvarEstado);
-document.getElementById('configForm').addEventListener('change', salvarEstado);
-document.getElementById('tableContainer').addEventListener('input', salvarEstado);
+/**
+ * Configura abertura/fechamento de um modal: botão de abrir, fechar com Esc,
+ * clique no fundo e botões de fechar adicionais. Retorna { abrir, fechar }.
+ */
+function configurarModal(overlay, { botaoAbrir, botoesFechar = [], aoAbrir } = {}) {
+  function abrir() {
+    overlay.hidden = false;
+    document.body.style.overflow = 'hidden';
+    if (aoAbrir) aoAbrir();
+  }
+  function fechar() {
+    overlay.hidden = true;
+    document.body.style.overflow = '';
+  }
 
-// ===== Interface do modal de restrições =====
+  if (botaoAbrir) botaoAbrir.addEventListener('click', abrir);
+  botoesFechar.forEach(btn => btn && btn.addEventListener('click', fechar));
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) fechar();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !overlay.hidden) fechar();
+  });
+
+  return { abrir, fechar };
+}
+
+/* ============================================================
+ * Modal de restrições
+ * ============================================================ */
+
 (function configurarModalRestricoes() {
   const overlay = document.getElementById('restricaoModal');
-  const btnAbrir = document.getElementById('abrirModal');
-  const btnFechar = document.getElementById('fecharModal');
-  const btnConcluir = document.getElementById('concluirModal');
-  const btnAdd = document.getElementById('addRestricao');
   const inputInicio = document.getElementById('restricaoInicio');
   const inputFim = document.getElementById('restricaoFim');
   const inputDescricao = document.getElementById('restricaoDescricao');
   const listaModal = document.getElementById('modalRestricoesList');
   const listaResumo = document.getElementById('restricoesResumo');
 
-  // Cria o item de uma restrição (descrição, período e botão de remover).
+  configurarModal(overlay, {
+    botaoAbrir: document.getElementById('abrirModal'),
+    botoesFechar: [
+      document.getElementById('fecharModal'),
+      document.getElementById('concluirModal')
+    ],
+    aoAbrir: () => inputInicio.focus()
+  });
+
+  /** Cria o item de lista de uma restrição (descrição, período e remover). */
   function criarItem(restricao, index) {
     const li = document.createElement('li');
     li.className = 'restricao-item';
 
     const info = document.createElement('span');
     info.className = 'restricao-info';
+
     const desc = document.createElement('strong');
     desc.textContent = restricao.descricao;
+
     const periodo = document.createElement('span');
     periodo.className = 'restricao-periodo';
     periodo.textContent =
-      formatDate(parseLocalDate(restricao.inicio)) +
-      ' – ' +
-      formatDate(parseLocalDate(restricao.fim));
-    info.appendChild(desc);
-    info.appendChild(periodo);
+      formatarDiaMes(parseLocalDate(restricao.inicio)) + ' – ' +
+      formatarDiaMes(parseLocalDate(restricao.fim));
+
+    info.append(desc, periodo);
 
     const btnRemover = document.createElement('button');
     btnRemover.type = 'button';
@@ -386,41 +418,31 @@ document.getElementById('tableContainer').addEventListener('input', salvarEstado
       render();
     });
 
-    li.appendChild(info);
-    li.appendChild(btnRemover);
+    li.append(info, btnRemover);
     return li;
   }
 
-  // Atualiza as duas listas (modal e resumo no formulário).
+  /** Redesenha as duas listas (modal e resumo no formulário). */
   function render() {
-    [listaModal, listaResumo].forEach(ul => {
-      if (!ul) return;
-      ul.innerHTML = '';
-      if (restricoes.length === 0) {
-        if (ul === listaModal) {
-          const vazio = document.createElement('li');
-          vazio.className = 'restricao-vazia';
-          vazio.textContent = 'Nenhuma restrição adicionada.';
-          ul.appendChild(vazio);
-        }
-        return;
-      }
-      restricoes.forEach((r, i) => ul.appendChild(criarItem(r, i)));
+    listaResumo.innerHTML = '';
+    listaModal.innerHTML = '';
+
+    if (restricoes.length === 0) {
+      const vazio = document.createElement('li');
+      vazio.className = 'restricao-vazia';
+      vazio.textContent = 'Nenhuma restrição adicionada.';
+      listaModal.appendChild(vazio);
+      return;
+    }
+
+    restricoes.forEach((restricao, i) => {
+      listaModal.appendChild(criarItem(restricao, i));
+      listaResumo.appendChild(criarItem(restricao, i));
     });
   }
 
-  function abrir() {
-    overlay.hidden = false;
-    document.body.style.overflow = 'hidden';
-    inputInicio.focus();
-  }
-
-  function fechar() {
-    overlay.hidden = true;
-    document.body.style.overflow = '';
-  }
-
-  // Ao escolher o início, o fim passa a valer o mesmo dia (ajustável depois).
+  // Ao escolher o início, o fim assume o mesmo dia (ajustável depois) e nunca
+  // pode ser anterior ao início.
   inputInicio.addEventListener('change', () => {
     inputFim.min = inputInicio.value;
     if (!inputFim.value || inputFim.value < inputInicio.value) {
@@ -428,7 +450,7 @@ document.getElementById('tableContainer').addEventListener('input', salvarEstado
     }
   });
 
-  btnAdd.addEventListener('click', () => {
+  document.getElementById('addRestricao').addEventListener('click', () => {
     const inicio = inputInicio.value;
     const descricao = inputDescricao.value.trim();
     if (!inicio) {
@@ -439,9 +461,8 @@ document.getElementById('tableContainer').addEventListener('input', salvarEstado
       alert('Informe a descrição da restrição.');
       return;
     }
-    let fim = inputFim.value || inicio;
-    if (fim < inicio) fim = inicio;
 
+    const fim = inputFim.value && inputFim.value >= inicio ? inputFim.value : inicio;
     restricoes.push({ inicio, fim, descricao });
     salvarRestricoes();
     render();
@@ -453,44 +474,59 @@ document.getElementById('tableContainer').addEventListener('input', salvarEstado
     inputInicio.focus();
   });
 
-  btnAbrir.addEventListener('click', abrir);
-  btnFechar.addEventListener('click', fechar);
-  btnConcluir.addEventListener('click', fechar);
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) fechar();
-  });
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && !overlay.hidden) fechar();
-  });
-
   carregarRestricoes();
   render();
 })();
 
-// ===== Modal de confirmação de reset =====
-(function configurarReset() {
+/* ============================================================
+ * Modal de confirmação de reset
+ * ============================================================ */
+
+(function configurarModalReset() {
   const overlay = document.getElementById('resetModal');
-  const btnAbrir = document.getElementById('resetBtn');
-  const btnCancelar = document.getElementById('cancelarReset');
-  const btnConfirmar = document.getElementById('confirmarReset');
-
-  function abrir() {
-    overlay.hidden = false;
-    document.body.style.overflow = 'hidden';
-  }
-
-  function fechar() {
-    overlay.hidden = true;
-    document.body.style.overflow = '';
-  }
-
-  btnAbrir.addEventListener('click', abrir);
-  btnCancelar.addEventListener('click', fechar);
-  btnConfirmar.addEventListener('click', resetarTudo);
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) fechar();
+  configurarModal(overlay, {
+    botaoAbrir: document.getElementById('resetBtn'),
+    botoesFechar: [document.getElementById('cancelarReset')]
   });
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && !overlay.hidden) fechar();
-  });
+  document.getElementById('confirmarReset').addEventListener('click', resetarTudo);
 })();
+
+/* ============================================================
+ * Inicialização
+ * ============================================================ */
+
+document.getElementById('configForm').addEventListener('submit', gerarTabela);
+document.getElementById('exportBtn').addEventListener('click', exportarParaExcel);
+
+// Salvamento automático a cada modificação no formulário ou na tabela
+document.getElementById('configForm').addEventListener('input', salvarEstado);
+document.getElementById('configForm').addEventListener('change', salvarEstado);
+document.getElementById('tableContainer').addEventListener('input', salvarEstado);
+
+// Restaura o estado salvo ao abrir a página (ou usa a data de hoje)
+window.addEventListener('DOMContentLoaded', () => {
+  const estado = carregarEstado();
+  const inputData = document.getElementById('dataInicio');
+
+  if (estado && estado.config) {
+    const c = estado.config;
+    if (c.numSemanas) document.getElementById('numSemanas').value = c.numSemanas;
+    if (c.dataInicio) inputData.value = c.dataInicio;
+    document.getElementById('hybridCheckbox').checked = !!c.hybrid;
+    if (Array.isArray(c.dias)) {
+      document.querySelectorAll('input[name="dias"]').forEach(el => {
+        el.checked = c.dias.includes(el.value);
+      });
+    }
+  }
+
+  if (!inputData.value) {
+    inputData.value = formatarISO(new Date());
+  }
+
+  // Regenera a tabela se havia uma salva, preservando o conteúdo digitado
+  if (estado && estado.tabelaGerada && estado.config &&
+      Array.isArray(estado.config.dias) && estado.config.dias.length > 0) {
+    gerarTabela();
+  }
+});
