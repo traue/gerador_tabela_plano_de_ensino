@@ -5,6 +5,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Plano de Ensino - Gerador de Tabela</title>
+  <!-- Aplica o tema salvo antes da renderização para evitar flash -->
+  <script>
+    (function () {
+      try {
+        var tema = localStorage.getItem('planoEnsinoTema');
+        if (tema) document.documentElement.dataset.theme = tema;
+      } catch (e) { /* armazenamento indisponível */ }
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <link rel="icon" type="image/x-icon" href="assets/favicon.png">
 </head>
@@ -12,14 +26,27 @@
 <body>
   <div class="container">
     <header>
+      <button type="button" id="themeToggle" class="theme-toggle"
+        aria-label="Alternar tema claro/escuro" title="Alternar tema">🌙</button>
       <h1>Gerador de Tabela do Plano de Ensino</h1>
       <p>
         Monte sua tabela de plano de ensino com base no número de semanas,
-        data de início e dias de aula.
+        data de início e dias de aula. Os feriados nacionais são preenchidos
+        automaticamente.
       </p>
     </header>
 
     <form id="configForm">
+      <!-- Identificação do plano (aparece no topo da tabela e na exportação) -->
+      <div class="form-group">
+        <label>Identificação do plano:</label>
+        <div class="form-grid">
+          <input type="text" id="disciplina" name="disciplina" placeholder="Disciplina" />
+          <input type="text" id="professor" name="professor" placeholder="Professor(a)" />
+          <input type="text" id="turma" name="turma" placeholder="Turma" />
+          <input type="text" id="semestre" name="semestre" placeholder="Semestre (ex.: 2026.1)" />
+        </div>
+      </div>
       <div class="form-group">
         <label for="numSemanas">Nº de semanas:</label>
         <input type="number" id="numSemanas" name="numSemanas" min="1" value="20" required />
@@ -46,6 +73,14 @@
         <label for="hybridCheckbox">Incluir EaD?</label>
         <label><input type="checkbox" id="hybridCheckbox" name="hybridCheckbox" />  Sim</label>
       </div>
+      <!-- Restrições de período (gerenciadas via modal) -->
+      <div class="form-group">
+        <label>Restrições e feriados:</label>
+        <button type="button" class="btn-secondary" id="abrirModal">
+          ➕ Adicionar restrições / feriados
+        </button>
+        <ul id="restricoesResumo" class="restricoes-list"></ul>
+      </div>
       <!-- Botão Gerar Tabela em largura total -->
       <button type="submit" class="btn full-width">Gerar Tabela</button>
     </form>
@@ -53,20 +88,87 @@
     <div id="tableContainer"></div>
 
     <!-- Botão Exportar para Excel em largura total -->
-    <button id="exportBtn" class="btn full-width" style="display: none">
-      ⬇️ Exportar para Excel 
+    <button type="button" id="exportBtn" class="btn full-width" style="display: none">
+      ⬇️ Exportar para Excel
     </button>
+
+    <!-- Botão para resetar todo o plano (abre confirmação) -->
+    <button type="button" id="resetBtn" class="btn-danger full-width">🗑️ Resetar tudo</button>
   </div>
 
   <footer>
     <p>
-      v. 2.1.0 - Desenvolvido por <strong>Thiago G. Traue </strong> -
-      <a href="https://github.com/traue/gerador_tabela_plano_de_ensino/">Projeto no GitHub</a>
+      v. 3.0.1 - Desenvolvido por <strong>Thiago G. Traue </strong> -
+      <a href="https://github.com/traue/gerador_tabela_plano_de_ensino/">Projeto no GitHub</a> -
+      <a href="https://buymeacoffee.com/traue" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
     </p>
   </footer>
 
+  <!-- Modal de restrições de período -->
+  <div id="restricaoModal" class="modal-overlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="restricaoTitulo">
+      <div class="modal-header">
+        <h2 id="restricaoTitulo">Restrições e feriados</h2>
+        <button type="button" class="modal-close" id="fecharModal" aria-label="Fechar">×</button>
+      </div>
+      <p class="modal-sub">
+        Cadastre períodos (semana de provas, palestras) ou feriados estaduais e
+        municipais. As datas dentro do período recebem a descrição automaticamente;
+        marcadas como feriado, não contam como aula.
+      </p>
+      <div class="restricao-form">
+        <div class="rf-row">
+          <div class="rf-field">
+            <label for="restricaoInicio">Início</label>
+            <input type="date" id="restricaoInicio" />
+          </div>
+          <div class="rf-field">
+            <label for="restricaoFim">Fim</label>
+            <input type="date" id="restricaoFim" />
+          </div>
+        </div>
+        <div class="rf-field">
+          <label for="restricaoDescricao">Descrição</label>
+          <input type="text" id="restricaoDescricao" placeholder="Ex.: Semana de provas" />
+        </div>
+        <label class="rf-check">
+          <input type="checkbox" id="restricaoFeriado" />
+          Marcar como feriado (estadual/municipal) — não conta como aula
+        </label>
+        <div class="rf-actions">
+          <button type="button" class="btn-secondary" id="cancelarEdicao" hidden>Cancelar</button>
+          <button type="button" class="btn" id="addRestricao">Adicionar</button>
+        </div>
+      </div>
+      <ul id="modalRestricoesList" class="restricoes-list"></ul>
+      <button type="button" class="btn full-width" id="concluirModal">Concluir</button>
+    </div>
+  </div>
+
+  <!-- Modal de confirmação para resetar tudo -->
+  <div id="resetModal" class="modal-overlay" hidden>
+    <div class="modal modal-confirm" role="alertdialog" aria-modal="true" aria-labelledby="resetTitulo">
+      <div class="modal-confirm-icon">🗑️</div>
+      <h2 id="resetTitulo">Resetar tudo?</h2>
+      <p class="modal-sub">
+        Isso vai apagar a configuração, a tabela, todo o conteúdo digitado e as
+        restrições salvas. Esta ação não pode ser desfeita.
+      </p>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancelarReset">Cancelar</button>
+        <button type="button" class="btn" id="confirmarReset">Sim, resetar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Indicador discreto de salvamento automático -->
+  <div id="saveIndicator" class="save-indicator" role="status" aria-live="polite">
+    ✓ Salvo automaticamente
+  </div>
+
   <!-- Biblioteca SheetJS para exportação em XLSX -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="js/feriados.js"></script>
   <script src="js/script.js"></script>
 </body>
 
